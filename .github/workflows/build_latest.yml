@@ -3,15 +3,13 @@ name: "build-latest"
 on:
   push:
     branches:
-      - "main"
-      - "master"
+      - "build"
     paths:
       - "src/**"
       - ".github/workflows/**"
   pull_request:
     branches:
-      - "main"
-      - "master"
+      - "build"
     paths:
       - "src/Dockerfile*"
 
@@ -20,18 +18,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 100
     steps:
-      - name: Run Docker on tmpfs
-        uses: JonasAlfredsson/docker-on-tmpfs@v1.0.1
+      - uses: actions/checkout@v3
+        name: Checkout
+  
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
         with:
-          tmpfs_size: 7
-          swap_size: 9
-
-      - name: Perform setup steps
-        uses: JonasAlfredsson/checkout-qemu-buildx@v2
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+  
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
         with:
-          should_login: ${{ github.event_name != 'pull_request' }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          images: |
+            ghcr.io/xterm-inator/docker-nginx-certbot
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and push latest Debian image
         uses: docker/build-push-action@v5.1.0
@@ -43,33 +50,6 @@ jobs:
             linux/386
             linux/arm64
             linux/arm/v7
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: jonasal/nginx-certbot:latest
-
-  docker_buildx_alpine:
-    runs-on: ubuntu-latest
-    timeout-minutes: 100
-    steps:
-      - name: Run Docker on tmpfs
-        uses: JonasAlfredsson/docker-on-tmpfs@v1.0.1
-        with:
-          tmpfs_size: 7
-          swap_size: 9
-
-      - name: Perform setup steps
-        uses: JonasAlfredsson/checkout-qemu-buildx@v2
-        with:
-          should_login: ${{ github.event_name != 'pull_request' }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push latest Alpine image
-        uses: docker/build-push-action@v5.1.0
-        with:
-          context: ./src
-          file: ./src/Dockerfile-alpine
-          platforms: |
-            linux/amd64
-            linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: jonasal/nginx-certbot:latest-alpine
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
